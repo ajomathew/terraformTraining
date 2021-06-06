@@ -10,5 +10,5 @@ terraform {
 }
 
 provider "github" {
-  token = "**"
+  token = "***"
 }

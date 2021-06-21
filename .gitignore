@@ -1,3 +1,5 @@
 .terraform**
 **.ps1
 **.tfstate**
+buildtime
+**temp

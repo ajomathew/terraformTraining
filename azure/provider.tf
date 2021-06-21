@@ -2,9 +2,14 @@
 terraform {
   required_version = ">= 0.12"
   required_providers {
+    # Using Azure RM Provider
     azurerm = {
         source = "hashicorp/azurerm"
         version = "=2.46.0"
+    }
+    # Using Azure null provider
+    null = {
+      source = "hashicorp/null"
     }
   }
 }

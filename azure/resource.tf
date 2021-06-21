@@ -1,11 +1,11 @@
 locals {
-  basename = "${var.projectname}"
+  basename = var.projectname
   location = {
     "aus" = "australiaeast",
-    "us" = "useast"
+    "us"  = "useast"
   }
   required_software_for_docker = [
-    "apt-transport-https","ca-certificates","curl","gnupg-agent","software-properties-common"
+    "apt-transport-https", "ca-certificates", "curl", "gnupg-agent", "software-properties-common"
   ]
   docker_packages = [
     "docker-ce", "docker-ce-cli", "containerd.io"
@@ -13,13 +13,15 @@ locals {
 }
 
 variable "projectname" {
-  type = string
+  type        = string
   description = "Project Name"
+  default = "ajtf"
 }
 
 variable "location" {
-  type = string
+  type        = string
   description = "Tell me where you want the resources to be \n supported values aus and us"
+  default = "aus"
 }
 
 
@@ -97,27 +99,58 @@ resource "azurerm_linux_virtual_machine" "terraform" {
     version   = "latest"
   }
 
-
+  # Provisioner used to do some post deployment activities in Project
   provisioner "remote-exec" {
     inline = [
       "sudo apt-get remove docker docker-engine docker.io containerd runc",
       "sudo apt-get update",
-      "sudo apt-get install ${join(" ",local.required_software_for_docker)} -y",
+      "sudo apt-get install ${join(" ", local.required_software_for_docker)} -y",
       "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -",
       "sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\"",
       "sudo apt-get update",
-      "sudo apt-get install ${join(" ",local.docker_packages)} -y",
-      "sudo usermod -aG docker adminuser",
-      "sudo systemctl enable docker"
+      "sudo apt-get install ${join(" ", local.docker_packages)} -y",
+      "sudo systemctl enable docker",
+      "sudo usermod -aG docker adminuser"
     ]
-    connection {
-      host = azurerm_public_ip.terraform.fqdn
-      type = "ssh"
-      user = "adminuser"
-      private_key = file("~/.ssh/id_rsa")
-    }
+    # Place connection here to get the scope limited to this provisioner
   }
 
+  # Local run command powerhsell to genreate a file
+  provisioner "local-exec" {
+    command     = "Get-Date -Format 'dddd MM/dd/yyyy HH:mm K' |Set-Content -Path .\\buildtime"
+    interpreter = ["powershell", "-Command"]
+  }
+
+  # Copy file over to the newly lauhched VM
+  provisioner "file" {
+    source      = ".\\buildtime"
+    destination = "/home/adminuser/buildtime"
+  }
+
+# Common connection string used for all provisioners
+  connection {
+    host        = azurerm_public_ip.terraform.fqdn
+    type        = "ssh"
+    user        = "adminuser"
+    private_key = file("~/.ssh/id_rsa")
+  }
+
+}
+
+# Run scrips after resource has been created 
+# If on first deployment if you forgot to run scripts on the VM
+resource "null_resource" "missingcommand" {
+  connection {
+    host        = azurerm_public_ip.terraform.fqdn
+    type        = "ssh"
+    user        = "adminuser"
+    private_key = file("~/.ssh/id_rsa")
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "cat /home/adminuser/buildtime"
+    ]
+  }
 }
 
 output "vmip" {

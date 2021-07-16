@@ -7,7 +7,7 @@ terraform {
         source = "hashicorp/azurerm"
         version = "=2.46.0"
     }
-    # Using Azure null provider
+    # Using null provider
     null = {
       source = "hashicorp/null"
     }

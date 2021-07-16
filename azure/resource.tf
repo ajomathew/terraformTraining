@@ -15,7 +15,6 @@ locals {
 variable "projectname" {
   type        = string
   description = "Project Name"
-  default = "ajtf"
 }
 
 variable "location" {
@@ -24,9 +23,13 @@ variable "location" {
   default = "aus"
 }
 
+variable "admin_username" {
+  type = string
+  description = "Admin User Name"
+}
 
 resource "azurerm_resource_group" "terraform" {
-  name     = "${local.basename}-terraform-resources"
+  name     = "${local.basename}-resources"
   location = local.location[var.location]
   # tags = {
   #   owner   = "Ajo Mathew",
@@ -35,7 +38,7 @@ resource "azurerm_resource_group" "terraform" {
 }
 
 resource "azurerm_virtual_network" "terraform" {
-  name                = "${local.basename}-terraform-network"
+  name                = "${local.basename}-network"
   address_space       = ["10.0.0.0/16"]
   location            = azurerm_resource_group.terraform.location
   resource_group_name = azurerm_resource_group.terraform.name
@@ -50,7 +53,7 @@ resource "azurerm_subnet" "terraform" {
 }
 
 resource "azurerm_network_interface" "terraform" {
-  name                = "${local.basename}-terraform-nic"
+  name                = "${local.basename}-nic"
   location            = azurerm_resource_group.terraform.location
   resource_group_name = azurerm_resource_group.terraform.name
 
@@ -68,22 +71,22 @@ resource "azurerm_public_ip" "terraform" {
   location            = azurerm_resource_group.terraform.location
   name                = "${local.basename}-pip"
   allocation_method   = "Dynamic"
-  domain_name_label   = "ajomvm"
+  domain_name_label   = "${var.projectname}"
 }
 
 resource "azurerm_linux_virtual_machine" "terraform" {
-  name                            = "${local.basename}-terraform-machine"
+  name                            = "${local.basename}-machine"
   resource_group_name             = azurerm_resource_group.terraform.name
   location                        = azurerm_resource_group.terraform.location
-  size                            = "Standard_B1ls"
-  admin_username                  = "adminuser"
+  size                            = "Standard_B2s"
+  admin_username                  = "${var.admin_username}"
   disable_password_authentication = true
   network_interface_ids = [
     azurerm_network_interface.terraform.id,
   ]
 
   admin_ssh_key {
-    username   = "adminuser"
+    username   = "${var.admin_username}"
     public_key = file("~/.ssh/id_rsa.pub")
   }
 
@@ -110,7 +113,7 @@ resource "azurerm_linux_virtual_machine" "terraform" {
       "sudo apt-get update",
       "sudo apt-get install ${join(" ", local.docker_packages)} -y",
       "sudo systemctl enable docker",
-      "sudo usermod -aG docker adminuser"
+      "sudo usermod -aG docker ${var.admin_username}"
     ]
     # Place connection here to get the scope limited to this provisioner
   }
@@ -124,14 +127,14 @@ resource "azurerm_linux_virtual_machine" "terraform" {
   # Copy file over to the newly lauhched VM
   provisioner "file" {
     source      = ".\\buildtime"
-    destination = "/home/adminuser/buildtime"
+    destination = "/home/${var.admin_username}/buildtime"
   }
 
 # Common connection string used for all provisioners
   connection {
     host        = azurerm_public_ip.terraform.fqdn
     type        = "ssh"
-    user        = "adminuser"
+    user        = "${var.admin_username}"
     private_key = file("~/.ssh/id_rsa")
   }
 
@@ -139,20 +142,20 @@ resource "azurerm_linux_virtual_machine" "terraform" {
 
 # Run scrips after resource has been created 
 # If on first deployment if you forgot to run scripts on the VM
-resource "null_resource" "missingcommand" {
-  connection {
-    host        = azurerm_public_ip.terraform.fqdn
-    type        = "ssh"
-    user        = "adminuser"
-    private_key = file("~/.ssh/id_rsa")
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "cat /home/adminuser/buildtime"
-    ]
-  }
-}
+# resource "null_resource" "missingcommand" {
+#   connection {
+#     host        = azurerm_public_ip.terraform.fqdn
+#     type        = "ssh"
+#     user        = "${var.admin_username}"
+#     private_key = file("~/.ssh/id_rsa")
+#   }
+#   provisioner "remote-exec" {
+#     inline = [
+#       "cat /home/${var.admin_username}/buildtime"
+#     ]
+#   }
+# }
 
 output "vmip" {
-  value = "Copy and connect via ssh adminuser@${azurerm_public_ip.terraform.fqdn}"
+  value = "Copy and connect via ssh ${var.admin_username}@${azurerm_public_ip.terraform.fqdn}"
 }
